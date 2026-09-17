@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { X } from 'lucide-react'
+import { X, Sparkles, Loader2 } from 'lucide-react'
 import { createTaskFormSchema, type CreateTaskFormValues } from '@/lib/validators/task'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import type { Task, TaskStatus } from '@/lib/types'
+import type { Task, TaskPriority, TaskStatus } from '@/lib/types'
 
 interface CreateTaskModalProps {
   open: boolean
@@ -26,10 +26,14 @@ export function CreateTaskModal({
 }: CreateTaskModalProps) {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
+  const [isSuggestingPriority, setIsSuggestingPriority] = useState(false)
+  const [aiSuggested, setAiSuggested] = useState<string | null>(null)
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     reset,
     formState: { errors },
   } = useForm<CreateTaskFormValues>({
@@ -43,9 +47,14 @@ export function CreateTaskModal({
     },
   })
 
+  const watchedTitle = watch('title')
+  const watchedDescription = watch('description')
+  const watchedDeadline = watch('deadline')
+
   // Reset form with current initialStatus when modal opens
   useEffect(() => {
     if (open) {
+      setAiSuggested(null)
       reset({
         title: '',
         description: '',
@@ -55,6 +64,44 @@ export function CreateTaskModal({
       })
     }
   }, [open, initialStatus, reset])
+
+  async function handleSuggestPriority() {
+    if (!watchedTitle || watchedTitle.trim().length < 2) {
+      toast({
+        variant: 'destructive',
+        title: 'Title required',
+        description: 'Enter a task title first so AI can determine priority.',
+      })
+      return
+    }
+
+    setIsSuggestingPriority(true)
+    try {
+      const res = await fetch('/api/ai/suggest-priority', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: watchedTitle,
+          description: watchedDescription || null,
+          deadline: watchedDeadline || null,
+        }),
+      })
+
+      const json = await res.json()
+      if (res.ok && json.data) {
+        setValue('priority', json.data.priority as TaskPriority)
+        setAiSuggested(json.data.reason)
+        toast({
+          title: 'Priority suggested',
+          description: `${json.data.priority.toUpperCase()} - ${json.data.reason}`,
+        })
+      }
+    } catch {
+      // Ignore background suggestion errors
+    } finally {
+      setIsSuggestingPriority(false)
+    }
+  }
 
   if (!open) return null
 
@@ -169,13 +216,44 @@ export function CreateTaskModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="priority" className="text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
-                Priority
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="priority" className="text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                  Priority
+                </Label>
+                <div className="flex items-center gap-1.5">
+                  {aiSuggested ? (
+                    <span
+                      className="text-[10px] text-[#0079BF] font-semibold bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-900 flex items-center gap-1 cursor-help"
+                      title={aiSuggested}
+                    >
+                      <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                      (AI suggested)
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleSuggestPriority}
+                    disabled={isSuggestingPriority}
+                    className="text-[11px] text-[#0079BF] hover:underline flex items-center gap-0.5"
+                    title="Suggest priority with AI based on deadline & keywords"
+                  >
+                    {isSuggestingPriority ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <>
+                        <Sparkles className="h-3 w-3 text-amber-500" />
+                        Suggest
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
               <select
                 id="priority"
                 className="h-10 w-full rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0079BF]"
-                {...register('priority')}
+                {...register('priority', {
+                  onChange: () => setAiSuggested(null), // Clear AI tag if user manually overrides
+                })}
               >
                 <option value="high">High (urgent)</option>
                 <option value="medium">Medium (standard)</option>
@@ -188,7 +266,18 @@ export function CreateTaskModal({
             <Label htmlFor="deadline" className="text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
               Target Deadline
             </Label>
-            <Input id="deadline" type="datetime-local" {...register('deadline')} />
+            <Input
+              id="deadline"
+              type="datetime-local"
+              {...register('deadline', {
+                onChange: () => {
+                  // If title exists, trigger suggestion
+                  if (watchedTitle && watchedTitle.trim().length >= 2) {
+                    setTimeout(() => handleSuggestPriority(), 100)
+                  }
+                },
+              })}
+            />
           </div>
 
           {/* Actions */}
