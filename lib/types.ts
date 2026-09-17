@@ -2,6 +2,14 @@ export type TaskStatus = 'todo' | 'in_progress' | 'done'
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type TaskRiskLevel = 'high_risk' | 'at_risk' | null
 
+export type Tag = {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
 export type Subtask = {
   id: string
   task_id: string
@@ -28,6 +36,7 @@ export type Task = {
   subtasks?: Subtask[]
   subtask_count?: number
   subtasks_done?: number
+  tags?: Tag[]
 }
 
 export type TimeEntry = {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -14,14 +14,15 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Plus, Kanban as KanbanIcon, Sparkles, AlertTriangle } from 'lucide-react'
+import { Plus, Kanban as KanbanIcon, Sparkles, AlertTriangle, Keyboard, Tag as TagIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Column } from '@/components/kanban/column'
 import { TaskCard } from '@/components/kanban/task-card'
 import { CreateTaskModal } from '@/components/kanban/create-task-modal'
 import { TaskDetailPanel } from '@/components/kanban/task-detail-panel'
+import { KeyboardShortcutsModal } from '@/components/kanban/keyboard-shortcuts-modal'
 import { useToast } from '@/hooks/use-toast'
-import type { Task, TaskStatus } from '@/lib/types'
+import type { Task, TaskStatus, Tag } from '@/lib/types'
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: 'todo', title: 'To Do' },
@@ -38,6 +39,48 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [mobileTab, setMobileTab] = useState<'all' | TaskStatus>('all')
   const [filterRiskOnly, setFilterRiskOnly] = useState(false)
+  const [availableTags, setAvailableTags] = useState<Tag[]>([])
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false)
+
+  // Fetch available tags on mount
+  useEffect(() => {
+    fetch('/api/tags')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.data && Array.isArray(json.data)) {
+          setAvailableTags(json.data)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Global keyboard shortcuts (C for create task, ? for shortcut cheatsheet)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault()
+        handleOpenCreate('todo')
+      } else if (e.key === '?') {
+        e.preventDefault()
+        setShortcutsModalOpen((prev) => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Setup sensors with activation constraints
   const pointerSensor = useSensor(PointerSensor, {
@@ -58,9 +101,19 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
   }, [tasks])
 
   const grouped = useMemo(() => {
-    const displayed = filterRiskOnly
-      ? tasks.filter((t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk')
-      : tasks
+    let displayed = tasks
+
+    if (filterRiskOnly) {
+      displayed = displayed.filter(
+        (t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk'
+      )
+    }
+
+    if (selectedTagId) {
+      displayed = displayed.filter((t) =>
+        t.tags?.some((tag) => tag.id === selectedTagId)
+      )
+    }
 
     return COLUMNS.reduce<Record<TaskStatus, Task[]>>(
       (acc, col) => {
@@ -71,7 +124,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
       },
       { todo: [], in_progress: [], done: [] }
     )
-  }, [tasks, filterRiskOnly])
+  }, [tasks, filterRiskOnly, selectedTagId])
 
   const isEmpty = tasks.length === 0
 
@@ -248,6 +301,18 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShortcutsModalOpen(true)}
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-gray-800 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              title="Keyboard shortcuts (?)"
+              aria-label="Open keyboard shortcuts"
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+              <kbd className="font-mono text-[10px] bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded border border-gray-200 dark:border-gray-700">
+                ?
+              </kbd>
+            </button>
             <Button
               onClick={() => handleOpenCreate('todo')}
               className="bg-[#0079BF] hover:bg-[#026AA7] text-white shadow-sm font-medium text-sm transition-all"
@@ -274,6 +339,47 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
             >
               {filterRiskOnly ? 'Show All Tasks' : 'Filter At-Risk'}
             </button>
+          </div>
+        )}
+
+        {/* Tag Filter Bar */}
+        {availableTags.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <span className="text-gray-400 text-xs font-medium mr-1 flex items-center gap-1 shrink-0">
+              <TagIcon className="h-3.5 w-3.5" /> Tags:
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedTagId(null)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors shrink-0 ${
+                selectedTagId === null
+                  ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 font-semibold'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              All Tags
+            </button>
+            {availableTags.map((tag) => {
+              const isSelected = selectedTagId === tag.id
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => setSelectedTagId(isSelected ? null : tag.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all border shrink-0 ${
+                    isSelected
+                      ? 'border-current shadow-xs font-bold ring-1 ring-current'
+                      : 'border-transparent opacity-75 hover:opacity-100'
+                  }`}
+                  style={{
+                    backgroundColor: isSelected ? `${tag.color}30` : `${tag.color}15`,
+                    color: tag.color,
+                  }}
+                >
+                  {tag.name}
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -388,8 +494,16 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
             onArchived={(id) => {
               setTasks((prev) => prev.filter((item) => item.id !== id))
             }}
+            onRestored={(restoredTask) => {
+              setTasks((prev) => [...prev, restoredTask])
+            }}
           />
         )}
+        {/* Keyboard Shortcuts Modal */}
+        <KeyboardShortcutsModal
+          open={shortcutsModalOpen}
+          onClose={() => setShortcutsModalOpen(false)}
+        />
       </div>
     </DndContext>
   )

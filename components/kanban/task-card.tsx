@@ -100,6 +100,29 @@ export function TaskCard({ task, onSelect }: TaskCardProps) {
         </p>
       )}
 
+      {/* Tag Badges */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {task.tags.slice(0, 2).map((tag) => (
+            <span
+              key={tag.id}
+              className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+              style={{
+                backgroundColor: `${tag.color}20`,
+                color: tag.color,
+              }}
+            >
+              {tag.name}
+            </span>
+          ))}
+          {task.tags.length > 2 && (
+            <span className="text-[10px] text-gray-400 self-center">
+              +{task.tags.length - 2}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Subtask Progress Bar if any subtasks */}
       {subtaskTotal > 0 && (
         <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-gray-800/60">
