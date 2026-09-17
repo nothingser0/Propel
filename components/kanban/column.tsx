@@ -1,7 +1,9 @@
 'use client'
 
+import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus, CheckCircle2, Circle, Clock } from 'lucide-react'
-import { TaskCard } from '@/components/kanban/task-card'
+import { SortableTaskCard } from '@/components/kanban/sortable-task-card'
 import type { Task, TaskStatus } from '@/lib/types'
 
 interface ColumnProps {
@@ -55,8 +57,23 @@ export function Column({
   const config = COLUMN_CONFIG[status]
   const Icon = config.icon
 
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+    data: {
+      type: 'column',
+      status,
+    },
+  })
+
   return (
-    <div className="flex flex-col rounded-xl bg-gray-100/80 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-800/80 p-3 sm:p-4 min-h-[450px]">
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col rounded-xl p-3 sm:p-4 min-h-[450px] transition-colors ${
+        isOver
+          ? 'bg-blue-50/70 dark:bg-blue-950/30 border-2 border-dashed border-[#0079BF]'
+          : 'bg-gray-100/80 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-800/80'
+      }`}
+    >
       {/* Column Header */}
       <div className="flex items-center justify-between pb-3 border-b border-gray-200/60 dark:border-gray-800/60 mb-3">
         <div className="flex items-center gap-2">
@@ -82,27 +99,36 @@ export function Column({
         </button>
       </div>
 
-      {/* Task List */}
-      <div className="flex-1 space-y-2.5 overflow-y-auto">
-        {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 rounded-lg border border-dashed border-gray-300 dark:border-gray-800 p-4 text-center">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {config.emptyText}
-            </p>
-            <button
-              type="button"
-              onClick={() => onQuickAdd(status)}
-              className="mt-2 text-xs font-medium text-[#0079BF] hover:underline"
-            >
-              + Add a task
-            </button>
-          </div>
-        ) : (
-          tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
-          ))
-        )}
-      </div>
+      {/* Sortable Task List */}
+      <SortableContext
+        items={tasks.map((t) => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="flex-1 space-y-2.5 overflow-y-auto">
+          {tasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 rounded-lg border border-dashed border-gray-300 dark:border-gray-800 p-4 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {config.emptyText}
+              </p>
+              <button
+                type="button"
+                onClick={() => onQuickAdd(status)}
+                className="mt-2 text-xs font-medium text-[#0079BF] hover:underline"
+              >
+                + Add a task
+              </button>
+            </div>
+          ) : (
+            tasks.map((task) => (
+              <SortableTaskCard
+                key={task.id}
+                task={task}
+                onSelect={onSelectTask}
+              />
+            ))
+          )}
+        </div>
+      </SortableContext>
     </div>
   )
 }
