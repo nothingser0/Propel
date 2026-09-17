@@ -34,11 +34,12 @@ export async function POST(request: Request) {
     return fail('Validation failed', 400, zodErrors(parsed.error))
   }
 
+  const targetStatus = parsed.data.status ?? 'todo'
   const { data: last } = await auth.supabase
     .from('tasks')
     .select('position')
     .eq('user_id', auth.user.id)
-    .eq('status', 'todo')
+    .eq('status', targetStatus)
     .eq('is_archived', false)
     .order('position', { ascending: false })
     .limit(1)
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
       description: parsed.data.description || null,
       priority: parsed.data.priority,
       deadline: parsed.data.deadline,
-      status: 'todo',
+      status: targetStatus,
       position: (last?.position ?? -1) + 1,
     })
     .select()

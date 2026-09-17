@@ -18,6 +18,7 @@ export const createTaskFormSchema = z.object({
   title: z.string().min(3, 'Title must be 3-200 characters').max(200),
   description: z.string().max(2000).optional(),
   priority: taskPrioritySchema,
+  status: taskStatusSchema.optional(),
   deadline: z.string().optional(),
 })
 
@@ -25,6 +26,7 @@ export const createTaskSchema = z.object({
   title: z.string().min(3, 'Title must be 3-200 characters').max(200),
   description: z.string().max(2000).optional().nullable(),
   priority: taskPrioritySchema,
+  status: taskStatusSchema.optional().default('todo'),
   deadline: deadlineSchema,
   tag_ids: z.array(z.string().uuid()).optional(),
 })
