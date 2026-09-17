@@ -1,8 +1,22 @@
-export default function TimeLogPage() {
-  return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">Time Log</h1>
-      <p className="text-gray-600 dark:text-gray-400">Time tracking akan ditampilkan di sini (Week 2).</p>
-    </div>
-  )
+import { TimeLogClient } from '@/components/time-log/time-log-client'
+import { createClient } from '@/lib/supabase/server'
+import type { TimeEntry } from '@/lib/types'
+
+export default async function TimeLogPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return null
+  }
+
+  const { data } = await supabase
+    .from('time_entries')
+    .select('*, tasks(id, title)')
+    .eq('user_id', user.id)
+    .order('start_time', { ascending: false })
+
+  return <TimeLogClient initialEntries={(data ?? []) as TimeEntry[]} />
 }

@@ -1,12 +1,25 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  X,
+  Trash2,
+  Sparkles,
+  Plus,
+  Play,
+  Square,
+  CheckCircle2,
+  Circle,
+  Clock,
+  CheckSquare,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AIBreakdownModal } from '@/components/kanban/ai-breakdown-modal'
+import { useTimerStore } from '@/lib/stores/timer-store'
 import { useToast } from '@/hooks/use-toast'
-import type { Task, TaskPriority, TaskStatus } from '@/lib/types'
+import type { Subtask, Task, TaskPriority, TaskStatus } from '@/lib/types'
 
 function toLocalInput(iso: string | null) {
   if (!iso) return ''
@@ -35,6 +48,32 @@ export function TaskDetailPanel({
   const [deadline, setDeadline] = useState(toLocalInput(task.deadline))
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Subtasks state
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks ?? [])
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [addingSubtask, setAddingSubtask] = useState(false)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
+
+  // Timer store
+  const { activeEntry, isRunning, startTimer, stopTimer } = useTimerStore()
+  const isTimerRunningOnThisTask = isRunning && activeEntry?.task_id === task.id
+
+  // Fetch fresh subtasks on mount if not provided
+  useEffect(() => {
+    async function loadSubtasks() {
+      try {
+        const res = await fetch(`/api/tasks/${task.id}/subtasks`)
+        if (res.ok) {
+          const json = await res.json()
+          setSubtasks(json.data ?? [])
+        }
+      } catch {
+        // Fallback to task.subtasks
+      }
+    }
+    loadSubtasks()
+  }, [task.id])
 
   async function save() {
     if (!title.trim() || title.length < 3) {
@@ -66,7 +105,7 @@ export function TaskDetailPanel({
       return
     }
     toast({ title: 'Task updated', description: 'Changes saved successfully.' })
-    onUpdated(json.data)
+    onUpdated({ ...json.data, subtasks })
   }
 
   async function archive() {
@@ -84,6 +123,92 @@ export function TaskDetailPanel({
     onClose()
   }
 
+  // Toggle subtask status
+  async function handleToggleSubtask(subtaskId: string, currentDone: boolean) {
+    const nextDone = !currentDone
+    // Optimistic
+    const nextList = subtasks.map((s) =>
+      s.id === subtaskId ? { ...s, is_done: nextDone } : s
+    )
+    setSubtasks(nextList)
+    onUpdated({ ...task, subtasks: nextList })
+
+    try {
+      const res = await fetch(`/api/subtasks/${subtaskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_done: nextDone }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      // Rollback
+      setSubtasks(subtasks)
+      toast({ variant: 'destructive', title: 'Failed to update subtask' })
+    }
+  }
+
+  // Add subtask
+  async function handleAddSubtask(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newSubtaskTitle.trim() || newSubtaskTitle.length < 2) return
+
+    setAddingSubtask(true)
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/subtasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newSubtaskTitle.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.message)
+
+      const updated = [...subtasks, json.data]
+      setSubtasks(updated)
+      setNewSubtaskTitle('')
+      onUpdated({ ...task, subtasks: updated })
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed to add subtask', description: err.message })
+    } finally {
+      setAddingSubtask(false)
+    }
+  }
+
+  // Delete subtask
+  async function handleDeleteSubtask(subtaskId: string) {
+    const prev = [...subtasks]
+    const nextList = subtasks.filter((s) => s.id !== subtaskId)
+    setSubtasks(nextList)
+    onUpdated({ ...task, subtasks: nextList })
+
+    try {
+      const res = await fetch(`/api/subtasks/${subtaskId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+    } catch {
+      setSubtasks(prev)
+      toast({ variant: 'destructive', title: 'Failed to delete subtask' })
+    }
+  }
+
+  // Timer toggle
+  async function handleTimerClick() {
+    try {
+      if (isTimerRunningOnThisTask) {
+        await stopTimer()
+        toast({ title: 'Timer stopped', description: 'Session recorded.' })
+      } else {
+        await startTimer(task.id, task.title)
+        toast({ title: 'Timer started', description: `Tracking time for ${task.title}` })
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Timer error' })
+    }
+  }
+
+  const subtasksTotal = subtasks.length
+  const subtasksDoneCount = subtasks.filter((s) => s.is_done).length
+  const progressPercent =
+    subtasksTotal > 0 ? Math.round((subtasksDoneCount / subtasksTotal) * 100) : 0
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
@@ -91,7 +216,7 @@ export function TaskDetailPanel({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <aside className="w-full max-w-md h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200">
+      <aside className="w-full max-w-lg h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200">
         <div>
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-800">
@@ -100,14 +225,39 @@ export function TaskDetailPanel({
                 Task Detail
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Close panel"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Quick Timer Button */}
+              <button
+                type="button"
+                onClick={handleTimerClick}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors shadow-2xs ${
+                  isTimerRunningOnThisTask
+                    ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-900'
+                    : 'bg-blue-50 text-[#0079BF] border-blue-200 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-900 hover:bg-blue-100'
+                }`}
+              >
+                {isTimerRunningOnThisTask ? (
+                  <>
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                    Stop Timer
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    Track Time
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close panel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Body Fields */}
@@ -130,7 +280,7 @@ export function TaskDetailPanel({
               </Label>
               <textarea
                 id="edit-description"
-                rows={4}
+                rows={3}
                 className="w-full rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0079BF]"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -184,6 +334,107 @@ export function TaskDetailPanel({
               />
             </div>
 
+            {/* Subtasks Section */}
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                    Subtasks ({subtasksDoneCount}/{subtasksTotal})
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAiModalOpen(true)}
+                  className="h-7 text-xs border-blue-200 dark:border-blue-900 text-[#0079BF] hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                >
+                  <Sparkles className="mr-1 h-3.5 w-3.5 text-amber-500" />
+                  AI Breakdown
+                </Button>
+              </div>
+
+              {/* Progress Bar */}
+              {subtasksTotal > 0 && (
+                <div className="mb-3">
+                  <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Subtask items checklist */}
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {subtasks.map((subtask) => (
+                  <div
+                    key={subtask.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 group"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSubtask(subtask.id, subtask.is_done)}
+                      className="flex items-center gap-2.5 text-left flex-1"
+                    >
+                      {subtask.is_done ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-gray-400 shrink-0" />
+                      )}
+                      <span
+                        className={`text-xs ${
+                          subtask.is_done
+                            ? 'line-through text-gray-400'
+                            : 'text-gray-700 dark:text-gray-200'
+                        }`}
+                      >
+                        {subtask.title}
+                      </span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {subtask.estimated_minutes ? (
+                        <span className="text-[10px] text-gray-400 shrink-0 font-medium">
+                          {subtask.estimated_minutes}m
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubtask(subtask.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 p-0.5 transition-opacity"
+                        title="Delete subtask"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Subtask Form */}
+              <form onSubmit={handleAddSubtask} className="flex gap-2 mt-2">
+                <Input
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  placeholder="Add a subtask..."
+                  className="h-8 text-xs"
+                  disabled={addingSubtask}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5 text-xs shrink-0"
+                  disabled={addingSubtask || !newSubtaskTitle.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add
+                </Button>
+              </form>
+            </div>
+
             {/* Created & Updated Info */}
             <div className="pt-2 text-[11px] text-gray-400 space-y-1 border-t border-gray-100 dark:border-gray-800">
               <p>Created: {new Date(task.created_at).toLocaleString()}</p>
@@ -212,6 +463,20 @@ export function TaskDetailPanel({
             {isDeleting ? 'Archiving...' : 'Archive Task'}
           </Button>
         </div>
+
+        {/* AI Breakdown Modal */}
+        <AIBreakdownModal
+          open={aiModalOpen}
+          taskId={task.id}
+          taskTitle={task.title}
+          taskDescription={task.description}
+          onClose={() => setAiModalOpen(false)}
+          onSubtasksAdded={(added) => {
+            const combined = [...subtasks, ...added]
+            setSubtasks(combined)
+            onUpdated({ ...task, subtasks: combined })
+          }}
+        />
       </aside>
     </div>
   )

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Kanban, LayoutDashboard, Clock, Menu, X } from 'lucide-react'
 import { LogoutButton } from '@/components/auth/logout-button'
+import { TimerTicker } from '@/components/timer/timer-ticker'
 
 interface DashboardLayoutClientProps {
   userEmail: string
@@ -143,6 +144,9 @@ export function DashboardLayoutClient({
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {children}
       </main>
+
+      {/* Global Timer Floating Widget */}
+      <TimerTicker />
     </div>
   )
 }
