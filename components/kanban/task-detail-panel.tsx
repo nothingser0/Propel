@@ -59,8 +59,13 @@ export function TaskDetailPanel({
   const { activeEntry, isRunning, startTimer, stopTimer } = useTimerStore()
   const isTimerRunningOnThisTask = isRunning && activeEntry?.task_id === task.id
 
-  // Fetch fresh subtasks on mount if not provided
+  // Fetch fresh subtasks on mount if not provided & handle Escape key
   useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
     async function loadSubtasks() {
       try {
         const res = await fetch(`/api/tasks/${task.id}/subtasks`)
@@ -73,7 +78,9 @@ export function TaskDetailPanel({
       }
     }
     loadSubtasks()
-  }, [task.id])
+
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [task.id, onClose])
 
   async function save() {
     if (!title.trim() || title.length < 3) {

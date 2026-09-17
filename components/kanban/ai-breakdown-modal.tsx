@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sparkles, Loader2, Plus, Trash2, Check, X, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,6 +34,16 @@ export function AIBreakdownModal({
   const [loading, setLoading] = useState(false)
   const [subtasks, setSubtasks] = useState<DraftSubtask[]>([])
   const [hasGenerated, setHasGenerated] = useState(false)
+
+  // Handle Escape key
+  useEffect(() => {
+    if (!open) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !loading) onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, loading, onClose])
 
   if (!open) return null
 

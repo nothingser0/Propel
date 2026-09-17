@@ -51,7 +51,7 @@ export function CreateTaskModal({
   const watchedDescription = watch('description')
   const watchedDeadline = watch('deadline')
 
-  // Reset form with current initialStatus when modal opens
+  // Reset form with current initialStatus when modal opens & handle Escape key
   useEffect(() => {
     if (open) {
       setAiSuggested(null)
@@ -62,8 +62,14 @@ export function CreateTaskModal({
         status: initialStatus,
         deadline: '',
       })
+
+      function handleKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Escape') onClose()
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [open, initialStatus, reset])
+  }, [open, initialStatus, reset, onClose])
 
   async function handleSuggestPriority() {
     if (!watchedTitle || watchedTitle.trim().length < 2) {
