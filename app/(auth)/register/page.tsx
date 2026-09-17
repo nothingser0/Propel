@@ -24,29 +24,45 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterInput) => {
     setIsLoading(true)
-    const supabase = createClient()
 
-    const { error } = await supabase.auth.signUp({
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: data.email,
+        password: data.password,
+        confirmPassword: data.confirmPassword,
+      }),
+    })
+    const json = await res.json()
+
+    if (!res.ok) {
+      toast({
+        variant: 'destructive',
+        title: 'Registrasi gagal',
+        description: json.message,
+      })
+      setIsLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,
     })
 
     if (error) {
       toast({
-        variant: 'destructive',
-        title: 'Registrasi gagal',
-        description: error.message,
+        title: 'Akun dibuat',
+        description: 'Silakan login.',
       })
-      setIsLoading(false)
+      router.push('/login')
       return
     }
 
-    toast({
-      title: 'Registrasi berhasil',
-      description: 'Akun Anda berhasil dibuat. Silakan login.',
-    })
-    
-    router.push('/login')
+    router.push('/board')
+    router.refresh()
   }
 
   return (
