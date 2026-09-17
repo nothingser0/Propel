@@ -1,3 +1,4 @@
+import { LogoutButton } from '@/components/auth/logout-button'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -17,7 +18,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4">
+      <aside className="flex w-64 flex-col bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4">
         <div className="mb-8">
           <h1 className="text-2xl font-bold" style={{ color: '#0079BF' }}>Propel</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
@@ -42,6 +43,9 @@ export default async function DashboardLayout({
             Time Log
           </Link>
         </nav>
+        <div className="mt-auto pt-8">
+          <LogoutButton />
+        </div>
       </aside>
 
       {/* Main content */}
