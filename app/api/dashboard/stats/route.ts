@@ -1,29 +1,23 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { DashboardOverview } from '@/components/dashboard/dashboard-overview'
+import { fail, ok, requireUser } from '@/lib/api'
 
-export default async function DashboardPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export async function GET() {
+  const auth = await requireUser()
+  if (auth.response) return auth.response
 
-  if (!user) {
-    redirect('/login')
-  }
-
-  // Compute stats on the server
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const dayOfWeek = now.getDay()
   const startOfCurrentWeek = new Date(startOfToday)
-  startOfCurrentWeek.setDate(startOfToday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+  startOfCurrentWeek.setDate(startOfToday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)) // Monday start
 
-  const { data: allTasks } = await supabase
+  // 1. Fetch all user tasks
+  const { data: allTasks, error: tasksError } = await auth.supabase
     .from('tasks')
     .select('id, title, status, priority, deadline, risk_level, updated_at, created_at')
-    .eq('user_id', user.id)
+    .eq('user_id', auth.user.id)
     .eq('is_archived', false)
+
+  if (tasksError) return fail(tasksError.message, 500)
 
   const tasks = allTasks ?? []
   const totalTasks = tasks.length
@@ -35,27 +29,29 @@ export default async function DashboardPage() {
     return updated.getTime() >= startOfCurrentWeek.getTime()
   }).length
 
-  const atRiskTasks = tasks.filter(
-    (t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk'
-  )
+  const atRiskTasks = tasks.filter((t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk')
 
-  const completionRate =
-    totalTasks > 0 ? Math.round((completedTasksTotal / totalTasks) * 100) : 0
+  const completionRate = totalTasks > 0 ? Math.round((completedTasksTotal / totalTasks) * 100) : 0
 
+  // 2. Fetch time entries for the last 4 weeks (28 days)
   const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000)
 
-  const { data: timeEntries } = await supabase
+  const { data: timeEntries, error: timeError } = await auth.supabase
     .from('time_entries')
     .select('id, start_time, duration_seconds')
-    .eq('user_id', user.id)
+    .eq('user_id', auth.user.id)
     .gte('start_time', fourWeeksAgo.toISOString())
+
+  if (timeError) return fail(timeError.message, 500)
 
   const entries = timeEntries ?? []
 
+  // Sum time tracked this week
   const timeThisWeekSeconds = entries
     .filter((e) => new Date(e.start_time).getTime() >= startOfCurrentWeek.getTime())
     .reduce((acc, curr) => acc + (curr.duration_seconds || 0), 0)
 
+  // Compute 4-week trend blocks
   const weeklyTrend = []
   for (let i = 3; i >= 0; i--) {
     const weekStart = new Date(startOfCurrentWeek)
@@ -64,17 +60,16 @@ export default async function DashboardPage() {
     weekEnd.setDate(weekStart.getDate() + 7)
 
     const label = `Week ${4 - i}`
-    const dateRangeLabel = `${weekStart.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    })}`
+    const dateRangeLabel = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
+    // Count tasks completed in that week
     const completedCount = tasks.filter((t) => {
       if (t.status !== 'done') return false
       const time = new Date(t.updated_at).getTime()
       return time >= weekStart.getTime() && time < weekEnd.getTime()
     }).length
 
+    // Sum hours tracked in that week
     const trackedSecs = entries
       .filter((e) => {
         const time = new Date(e.start_time).getTime()
@@ -93,9 +88,10 @@ export default async function DashboardPage() {
     })
   }
 
+  // Burnout check: logged > 40h (144,000s) in any of the recent 2 weeks
   const isBurnoutRisk = weeklyTrend.slice(-2).some((w) => w.seconds > 40 * 3600)
 
-  const initialData = {
+  return ok({
     stats: {
       totalTasks,
       completedThisWeek,
@@ -110,7 +106,5 @@ export default async function DashboardPage() {
     urgentTasks: tasks
       .filter((t) => t.status !== 'done' && (t.priority === 'high' || t.risk_level != null))
       .slice(0, 5),
-  }
-
-  return <DashboardOverview initialData={initialData} />
+  })
 }
