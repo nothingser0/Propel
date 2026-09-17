@@ -38,6 +38,7 @@ export const updateTaskSchema = z.object({
   priority: taskPrioritySchema.optional(),
   deadline: deadlineSchema,
   position: z.number().int().optional(),
+  is_archived: z.boolean().optional(),
 })
 
 export const moveTaskSchema = z.object({

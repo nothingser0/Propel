@@ -34,11 +34,13 @@ export function TaskDetailPanel({
   onClose,
   onUpdated,
   onArchived,
+  onRestored,
 }: {
   task: Task
   onClose: () => void
   onUpdated: (task: Task) => void
   onArchived: (id: string) => void
+  onRestored?: (task: Task) => void
 }) {
   const { toast } = useToast()
   const [title, setTitle] = useState(task.title)
@@ -125,9 +127,35 @@ export function TaskDetailPanel({
       toast({ variant: 'destructive', title: 'Archive failed', description: json.message })
       return
     }
-    toast({ title: 'Task archived', description: 'Task removed from board.' })
     onArchived(task.id)
     onClose()
+
+    toast({
+      title: 'Task archived',
+      description: `"${task.title}" has been archived.`,
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          try {
+            const restoreRes = await fetch(`/api/tasks/${task.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_archived: false }),
+            })
+            const restoreJson = await restoreRes.json()
+            if (restoreRes.ok && restoreJson.data) {
+              if (onRestored) onRestored(restoreJson.data)
+              toast({
+                title: 'Task restored',
+                description: `"${task.title}" was restored back to your board.`,
+              })
+            }
+          } catch {
+            toast({ variant: 'destructive', title: 'Could not restore task' })
+          }
+        },
+      },
+    })
   }
 
   // Toggle subtask status
