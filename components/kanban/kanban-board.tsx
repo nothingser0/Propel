@@ -14,7 +14,7 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Plus, Kanban as KanbanIcon, Sparkles } from 'lucide-react'
+import { Plus, Kanban as KanbanIcon, Sparkles, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Column } from '@/components/kanban/column'
 import { TaskCard } from '@/components/kanban/task-card'
@@ -37,6 +37,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
   const [createInitialStatus, setCreateInitialStatus] = useState<TaskStatus>('todo')
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [mobileTab, setMobileTab] = useState<'all' | TaskStatus>('all')
+  const [filterRiskOnly, setFilterRiskOnly] = useState(false)
 
   // Setup sensors with activation constraints
   const pointerSensor = useSensor(PointerSensor, {
@@ -52,17 +53,25 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
   })
   const sensors = useSensors(pointerSensor, touchSensor)
 
+  const atRiskCount = useMemo(() => {
+    return tasks.filter((t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk').length
+  }, [tasks])
+
   const grouped = useMemo(() => {
+    const displayed = filterRiskOnly
+      ? tasks.filter((t) => t.risk_level === 'high_risk' || t.risk_level === 'at_risk')
+      : tasks
+
     return COLUMNS.reduce<Record<TaskStatus, Task[]>>(
       (acc, col) => {
-        acc[col.status] = tasks
+        acc[col.status] = displayed
           .filter((task) => task.status === col.status)
           .sort((a, b) => a.position - b.position)
         return acc
       },
       { todo: [], in_progress: [], done: [] }
     )
-  }, [tasks])
+  }, [tasks, filterRiskOnly])
 
   const isEmpty = tasks.length === 0
 
@@ -248,6 +257,25 @@ export function KanbanBoard({ initialTasks }: { initialTasks: Task[] }) {
             </Button>
           </div>
         </div>
+
+        {/* At-risk deadline alert banner */}
+        {atRiskCount > 0 && (
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div className="text-xs sm:text-sm">
+                <span className="font-semibold">{atRiskCount} task{atRiskCount > 1 ? 's' : ''} at risk</span> of missing deadline.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFilterRiskOnly((prev) => !prev)}
+              className="text-xs font-semibold px-2.5 py-1 rounded-md bg-amber-200/70 dark:bg-amber-900/60 hover:bg-amber-200 dark:hover:bg-amber-800 text-amber-900 dark:text-amber-100 transition-colors"
+            >
+              {filterRiskOnly ? 'Show All Tasks' : 'Filter At-Risk'}
+            </button>
+          </div>
+        )}
 
         {/* Empty State Banner when Board has 0 tasks */}
         {isEmpty && (
