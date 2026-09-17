@@ -36,6 +36,15 @@ export function TimerTicker() {
     return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':')
   }
 
+  // Update browser tab title dynamically with live timer countdown
+  useEffect(() => {
+    if (isRunning) {
+      document.title = `(${formatHHMMSS(elapsedSeconds)}) Propel`
+    } else {
+      document.title = 'Propel - Kanban + AI Copilot'
+    }
+  }, [isRunning, elapsedSeconds])
+
   async function handleStop() {
     try {
       await stopTimer()
