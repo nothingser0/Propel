@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   let query = auth.supabase
     .from('tasks')
-    .select('*')
+    .select('*, subtasks(*)')
     .eq('user_id', auth.user.id)
     .eq('is_archived', false)
     .order('position', { ascending: true })

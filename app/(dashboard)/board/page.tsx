@@ -6,7 +6,7 @@ export default async function BoardPage() {
   const supabase = await createClient()
   const { data } = await supabase
     .from('tasks')
-    .select('*')
+    .select('*, subtasks(*)')
     .eq('is_archived', false)
     .order('position', { ascending: true })
 

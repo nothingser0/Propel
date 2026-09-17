@@ -1,6 +1,6 @@
 'use client'
 
-import { Calendar, AlertTriangle } from 'lucide-react'
+import { Calendar, AlertTriangle, CheckSquare, Clock } from 'lucide-react'
 import type { Task, TaskPriority } from '@/lib/types'
 
 interface TaskCardProps {
@@ -59,6 +59,14 @@ export function TaskCard({ task, onSelect }: TaskCardProps) {
   const priority = PRIORITY_BADGES[task.priority] ?? PRIORITY_BADGES.medium
   const deadlineInfo = formatDeadline(task.deadline)
 
+  const subtaskTotal =
+    task.subtask_count ?? (task.subtasks ? task.subtasks.length : 0)
+  const subtaskDone =
+    task.subtasks_done ??
+    (task.subtasks ? task.subtasks.filter((s) => s.is_done).length : 0)
+  const percentDone =
+    subtaskTotal > 0 ? Math.round((subtaskDone / subtaskTotal) * 100) : 0
+
   return (
     <div
       role="button"
@@ -92,8 +100,27 @@ export function TaskCard({ task, onSelect }: TaskCardProps) {
         </p>
       )}
 
+      {/* Subtask Progress Bar if any subtasks */}
+      {subtaskTotal > 0 && (
+        <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-gray-800/60">
+          <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+            <span className="flex items-center gap-1 font-medium text-gray-600 dark:text-gray-300">
+              <CheckSquare className="h-3 w-3 text-emerald-500" />
+              {subtaskDone}/{subtaskTotal} subtasks
+            </span>
+            <span>{percentDone}%</span>
+          </div>
+          <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+              style={{ width: `${percentDone}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Footer Metadata */}
-      <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+      <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-center gap-2">
           {deadlineInfo ? (
             <span
